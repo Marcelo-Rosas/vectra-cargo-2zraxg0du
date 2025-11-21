@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { mockApi } from '@/services/mockApi'
 import { SchemaField } from '@/types'
 import {
@@ -43,11 +43,7 @@ export function TableViewer({
   const [page, setPage] = useState(1)
   const itemsPerPage = 10
 
-  useEffect(() => {
-    loadData()
-  }, [tableName])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const result = await mockApi.getTableData(tableName)
@@ -55,7 +51,11 @@ export function TableViewer({
     } finally {
       setLoading(false)
     }
-  }
+  }, [tableName])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const displayData = showSample ? data.slice(0, 5) : data
 
