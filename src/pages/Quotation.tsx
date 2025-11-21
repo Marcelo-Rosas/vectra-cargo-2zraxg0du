@@ -113,10 +113,36 @@ export default function Quotation() {
       const data = await mockApi.calculateQuotation(values as any)
       setResult(data)
       toast.success('Cotação calculada com sucesso!')
+
+      if (data.grossMarginPercent < 10) {
+        toast.warning(
+          `Atenção: Margem bruta baixa (${data.grossMarginPercent.toFixed(1)}%) para esta cotação.`,
+          { duration: 6000 },
+        )
+      }
     } catch (error) {
       toast.error('Erro ao calcular cotação')
     } finally {
       setIsCalculating(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!result) return
+    const values = form.getValues()
+    try {
+      await mockApi.saveQuotation({
+        ...values,
+        ...result,
+        id: Math.random().toString(),
+        userId: '1',
+        createdAt: new Date().toISOString(),
+        isFavorite: false,
+        status: 'saved',
+      } as any)
+      toast.success(`Cotação '${values.name || 'Sem nome'}' salva com sucesso.`)
+    } catch (error) {
+      toast.error('Erro ao salvar cotação')
     }
   }
 
@@ -646,7 +672,11 @@ export default function Quotation() {
                 </div>
               </CardContent>
               <CardFooter className="flex gap-2">
-                <Button className="flex-1" variant="outline">
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={handleSave}
+                >
                   <Save className="mr-2 h-4 w-4" /> Salvar
                 </Button>
                 <Button className="flex-1" variant="secondary">

@@ -13,23 +13,21 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Search, Filter, FileDown, Eye } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Search, Filter, FileDown, Eye, ArrowRightLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 export default function History() {
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     const loadData = async () => {
-      const stats = await mockApi.getDashboardStats()
-      // Mocking a larger list based on recent
-      const list = [
-        ...stats.recentQuotations,
-        ...stats.recentQuotations,
-        ...stats.recentQuotations,
-      ]
-      setQuotations(list)
+      const data = await mockApi.getQuotations()
+      setQuotations(data)
       setLoading(false)
     }
     loadData()
@@ -42,6 +40,17 @@ export default function History() {
       q.destinationUf.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    )
+  }
+
+  const handleCompare = () => {
+    if (selectedIds.length < 2) return
+    navigate(`/comparison?ids=${selectedIds.join(',')}`)
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -49,6 +58,12 @@ export default function History() {
           Histórico de Cotações
         </h2>
         <div className="flex gap-2 w-full md:w-auto">
+          {selectedIds.length >= 2 && (
+            <Button onClick={handleCompare} className="animate-fade-in">
+              <ArrowRightLeft className="mr-2 h-4 w-4" /> Comparar (
+              {selectedIds.length})
+            </Button>
+          )}
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -72,6 +87,7 @@ export default function History() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]"></TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Rota</TableHead>
@@ -85,13 +101,19 @@ export default function History() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredQuotations.map((q, i) => (
-                  <TableRow key={`${q.id}-${i}`}>
+                filteredQuotations.map((q) => (
+                  <TableRow key={q.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.includes(q.id)}
+                        onCheckedChange={() => toggleSelection(q.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       {new Date(q.createdAt).toLocaleDateString()}
                     </TableCell>

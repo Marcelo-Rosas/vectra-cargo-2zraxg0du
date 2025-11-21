@@ -5,6 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   TrendingUp,
   DollarSign,
   FileText,
@@ -37,20 +44,26 @@ import {
   Pie,
   Cell,
   Legend,
+  BarChart,
+  Bar,
 } from 'recharts'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 export default function Index() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState('30d')
+  const { user } = useAuthStore()
 
   useEffect(() => {
     const loadStats = async () => {
-      const data = await mockApi.getDashboardStats()
+      setLoading(true)
+      const data = await mockApi.getDashboardStats(period)
       setStats(data)
       setLoading(false)
     }
     loadStats()
-  }, [])
+  }, [period])
 
   if (loading) {
     return <DashboardSkeleton />
@@ -58,11 +71,23 @@ export default function Index() {
 
   if (!stats) return null
 
+  const canViewAnalytics = user?.role === 'admin' || user?.role === 'manager'
+
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <div className="flex items-center space-x-2">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">Últimos 7 dias</SelectItem>
+              <SelectItem value="30d">Últimos 30 dias</SelectItem>
+              <SelectItem value="90d">Últimos 90 dias</SelectItem>
+            </SelectContent>
+          </Select>
           <Button asChild>
             <Link to="/quotation">
               <Plus className="mr-2 h-4 w-4" /> Nova Cotação
@@ -76,19 +101,19 @@ export default function Index() {
           title="Total de Cotações"
           value={stats.totalQuotations.toString()}
           icon={FileText}
-          description="+20.1% mês passado"
+          description="+20.1% no período"
         />
         <StatsCard
           title="Margem Média"
           value={`${stats.averageMargin.toFixed(1)}%`}
           icon={TrendingUp}
-          description="+1.2% mês passado"
+          description="+1.2% no período"
         />
         <StatsCard
           title="Ticket Médio"
           value={`R$ ${stats.averageTicket.toLocaleString('pt-BR')}`}
           icon={DollarSign}
-          description="+4% mês passado"
+          description="+4% no período"
         />
         <StatsCard
           title="Favoritas"
@@ -193,6 +218,47 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
+
+      {canViewAnalytics && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Rotas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer
+                config={{
+                  count: { label: 'Cotações', color: 'hsl(var(--primary))' },
+                }}
+                className="h-[250px]"
+              >
+                <BarChart
+                  data={stats.topRoutes}
+                  layout="vertical"
+                  margin={{ left: 20 }}
+                >
+                  <CartesianGrid horizontal={false} />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    dataKey={(data) => `${data.origin}-${data.destination}`}
+                    type="category"
+                    tickLine={false}
+                    axisLine={false}
+                    width={60}
+                    className="text-xs"
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar
+                    dataKey="count"
+                    fill="hsl(var(--primary))"
+                    radius={[0, 4, 4, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

@@ -8,6 +8,7 @@ import History from './pages/History'
 import Admin from './pages/Admin'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import Comparison from './pages/Comparison'
 import Layout from './components/Layout'
 
 const App = () => (
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/quotation" element={<Quotation />} />
           <Route path="/history" element={<History />} />
+          <Route path="/comparison" element={<Comparison />} />
           <Route path="/admin" element={<Admin />} />
         </Route>
         <Route path="*" element={<NotFound />} />
