@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { mockApi } from '@/services/mockApi'
 import { calcularFreteLotacao } from '@/services/calculo-lotacao'
+import { QuotationService } from '@/services/quotation'
 import { QuotationResult } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,6 +42,7 @@ import {
   ChartTooltipContent,
 } from '@/components/ui/chart'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from 'recharts'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 const formSchema = z.object({
   name: z.string().optional(),
@@ -98,6 +99,8 @@ const UFS = [
 export default function Quotation() {
   const [result, setResult] = useState<QuotationResult | null>(null)
   const [isCalculating, setIsCalculating] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const { user } = useAuthStore()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -114,7 +117,6 @@ export default function Quotation() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsCalculating(true)
     try {
-      // Use the new service for calculation
       const data = await calcularFreteLotacao(values as any)
       setResult(data)
       toast.success('Cotação calculada com sucesso!')
@@ -133,21 +135,26 @@ export default function Quotation() {
   }
 
   const handleSave = async () => {
-    if (!result) return
+    if (!result || !user) {
+      if (!user) toast.error('Você precisa estar logado para salvar.')
+      return
+    }
+
+    setIsSaving(true)
     const values = form.getValues()
     try {
-      await mockApi.saveQuotation({
+      await QuotationService.save({
         ...values,
         ...result,
-        id: Math.random().toString(),
-        userId: '1',
-        createdAt: new Date().toISOString(),
+        userId: user.id,
         isFavorite: false,
         status: 'saved',
       } as any)
       toast.success(`Cotação '${values.name || 'Sem nome'}' salva com sucesso.`)
-    } catch (error) {
-      toast.error('Erro ao salvar cotação')
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao salvar cotação')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -540,6 +547,9 @@ export default function Quotation() {
                             onValueChange={(val) => field.onChange(val)}
                           />
                         </FormControl>
+                        <FormDescription className="text-xs">
+                          Deixe 0 para cálculo automático
+                        </FormDescription>
                       </FormItem>
                     )}
                   />
@@ -752,8 +762,14 @@ export default function Quotation() {
                   className="flex-1"
                   variant="outline"
                   onClick={handleSave}
+                  disabled={isSaving}
                 >
-                  <Save className="mr-2 h-4 w-4" /> Salvar
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Salvar
                 </Button>
                 <Button className="flex-1" variant="secondary">
                   <FileDown className="mr-2 h-4 w-4" /> PDF

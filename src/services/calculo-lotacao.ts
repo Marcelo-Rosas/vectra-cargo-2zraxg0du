@@ -1,5 +1,6 @@
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase/client'
 import { TarifaNTC, QuotationInput, QuotationResult } from '@/types'
+import { ValePedagioService } from './vale-pedagio'
 
 export async function buscarTarifaNTC(
   distancia: number,
@@ -7,44 +8,45 @@ export async function buscarTarifaNTC(
 ): Promise<TarifaNTC> {
   const startTime = Date.now()
   try {
-    // Query ntc_lotacao table directly
-    const { data, error } = await supabase
-      .from('ntc_lotacao')
-      .select('*')
-      .eq('is_active', true)
-      .lte('distance_min', distancia)
-      .gte('distance_max', distancia)
-      .order('version_date', { ascending: false })
-      .limit(1)
-      .single()
+    // Use RPC to get the correct rate based on distance and vehicle
+    const { data, error } = await supabase.rpc('get_ntc_lotacao_rate', {
+      distance: distancia,
+      vehicle: tipoVeiculo,
+    })
 
-    if (error || !data) {
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    if (!data || data.length === 0) {
       throw new Error(
-        error?.message || 'Nenhuma tarifa encontrada para esta distância',
+        'Nenhuma tarifa NTC encontrada para esta distância e veículo.',
       )
     }
 
+    const tarifa = data[0]
+
     await logIntegracao(
-      'ntc_lotacao',
-      'SELECT',
+      'get_ntc_lotacao_rate',
+      'RPC',
       { distancia, tipoVeiculo },
-      data,
+      tarifa,
       200,
       Date.now() - startTime,
     )
 
     return {
-      faixa_inicial: data.distance_min,
-      faixa_final: data.distance_max,
-      custo_peso_rs_ton: data.price_per_ton,
-      custo_valor_percent: data.freight_value_percent,
-      gris_percent: data.gris_percent,
-      tso_percent: data.tso_percent,
+      faixa_inicial: 0, // Not returned by RPC, not critical for calculation
+      faixa_final: 0,
+      custo_peso_rs_ton: tarifa.price_per_ton,
+      custo_valor_percent: tarifa.freight_value_percent,
+      gris_percent: tarifa.gris_percent,
+      tso_percent: tarifa.tso_percent,
     }
   } catch (err: any) {
     await logIntegracao(
-      'ntc_lotacao',
-      'SELECT',
+      'get_ntc_lotacao_rate',
+      'RPC',
       { distancia, tipoVeiculo },
       { error: err.message },
       500,
@@ -94,7 +96,7 @@ export async function buscarCashback(ufDestino: string): Promise<number> {
   const startTime = Date.now()
   try {
     const { data, error } = await supabase
-      .from('cashback_uf')
+      .from('cashback_rules')
       .select('percentage')
       .eq('uf', ufDestino)
       .single()
@@ -102,7 +104,7 @@ export async function buscarCashback(ufDestino: string): Promise<number> {
     if (error) return 0 // No cashback found is not an error
 
     await logIntegracao(
-      'cashback_uf',
+      'cashback_rules',
       'SELECT',
       { ufDestino },
       data,
@@ -112,7 +114,7 @@ export async function buscarCashback(ufDestino: string): Promise<number> {
     return data.percentage || 0
   } catch (err: any) {
     await logIntegracao(
-      'cashback_uf',
+      'cashback_rules',
       'SELECT',
       { ufDestino },
       { error: err.message },
@@ -132,14 +134,13 @@ async function logIntegracao(
   duration: number,
 ) {
   try {
-    await supabase.from('integracoes_log').insert({
+    await supabase.from('integration_logs').insert({
       endpoint,
       method,
       request_payload: request,
       response_payload: response,
       status_code: status,
       duration_ms: duration,
-      created_at: new Date().toISOString(),
     })
   } catch (e) {
     console.error('Failed to log integration', e)
@@ -158,7 +159,30 @@ export async function calcularFreteLotacao(
   // 2. Get ICMS
   const icmsRate = await buscarAliquotaICMS(input.originUf, input.destinationUf)
 
-  // 3. Calculate Revenue (Freight)
+  // 3. Calculate Toll (Vale Pedágio)
+  // If toll is not manually provided, calculate it
+  let tollValue = input.toll || 0
+  if (!input.toll && input.vehicleType) {
+    try {
+      // Estimate axes based on vehicle type for calculation
+      let axes = 2
+      if (input.vehicleType === 'truck') axes = 3
+      if (input.vehicleType === 'carreta') axes = 5
+
+      tollValue = await ValePedagioService.calculateCost(
+        input.originUf, // Using UF as proxy for city for this mock, ideally would be city
+        input.destinationUf,
+        input.vehicleType,
+        axes,
+      )
+    } catch (e) {
+      console.warn('Failed to calculate toll automatically', e)
+      // Continue with 0 or handle error? User story says "handle various edge cases gracefully"
+      // We keep 0 and maybe the UI shows a warning if needed, but we don't block calculation
+    }
+  }
+
+  // 4. Calculate Revenue (Freight)
   let revenue = 0
   if (input.useTable && tariff) {
     const weightTon = input.weight / 1000
@@ -172,14 +196,14 @@ export async function calcularFreteLotacao(
     revenue = input.informedFreight || 0
   }
 
-  // 4. Calculate Costs
+  // 5. Calculate Costs
   const operationalCosts =
     (input.loadingCost || 0) +
     (input.unloadingCost || 0) +
     (input.equipmentRent || 0) +
-    (input.toll || 0)
+    tollValue
 
-  // 5. Calculate Taxes
+  // 6. Calculate Taxes
   const icmsValue = revenue * (icmsRate / 100)
   const pisCofinsRate = 0.0365 // 3.65%
   const pisCofinsValue = revenue * pisCofinsRate
@@ -188,13 +212,13 @@ export async function calcularFreteLotacao(
 
   const totalTaxes = icmsValue + pisCofinsValue
 
-  // 6. Calculate Margin
+  // 7. Calculate Margin
   const totalCosts = operationalCosts + totalTaxes
   const grossMarginValue = revenue - totalCosts
   const grossMarginPercent =
     revenue > 0 ? (grossMarginValue / revenue) * 100 : 0
 
-  // 7. Cashback (Optional logic, just logging it for now as per user story requirement to integrate lookup)
+  // 8. Cashback (Optional logic)
   await buscarCashback(input.destinationUf)
 
   return {
