@@ -14,6 +14,8 @@ export interface QuotationInput {
   cargoType: 'lotacao' | 'fracionada' | 'container'
   originUf: string
   destinationUf: string
+  originCep?: string
+  destinationCep?: string
   distance: number
   vehicleType?: string
   weight: number
@@ -99,4 +101,33 @@ export interface SchemaField {
   name: string
   type: string
   description: string
+}
+
+export interface TarifaNTC {
+  faixa_inicial: number
+  faixa_final: number
+  custo_peso_rs_ton: number
+  custo_valor_percent: number
+  gris_percent: number
+  tso_percent: number
+}
+
+export interface ICMSAliquot {
+  origin_uf: string
+  destination_uf: string
+  rate: number
+}
+
+export interface CashbackRule {
+  uf: string
+  percentage: number
+}
+
+export interface IntegrationLog {
+  endpoint: string
+  method: string
+  request_payload: any
+  response_payload: any
+  status_code: number
+  duration_ms: number
 }

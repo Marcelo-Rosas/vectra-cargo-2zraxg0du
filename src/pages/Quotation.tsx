@@ -3,9 +3,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { mockApi } from '@/services/mockApi'
+import { calcularFreteLotacao } from '@/services/calculo-lotacao'
 import { QuotationResult } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MaskedInput } from '@/components/ui/masked-input'
 import {
   Select,
   SelectContent,
@@ -46,6 +48,8 @@ const formSchema = z.object({
   cargoType: z.enum(['lotacao', 'fracionada', 'container']),
   originUf: z.string().min(2, 'Selecione a UF'),
   destinationUf: z.string().min(2, 'Selecione a UF'),
+  originCep: z.string().min(8, 'CEP inválido').optional(),
+  destinationCep: z.string().min(8, 'CEP inválido').optional(),
   distance: z.coerce.number().min(1, 'Distância obrigatória'),
   vehicleType: z.string().optional(),
   weight: z.coerce.number().min(1, 'Peso obrigatório'),
@@ -110,7 +114,8 @@ export default function Quotation() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsCalculating(true)
     try {
-      const data = await mockApi.calculateQuotation(values as any)
+      // Use the new service for calculation
+      const data = await calcularFreteLotacao(values as any)
       setResult(data)
       toast.success('Cotação calculada com sucesso!')
 
@@ -120,8 +125,8 @@ export default function Quotation() {
           { duration: 6000 },
         )
       }
-    } catch (error) {
-      toast.error('Erro ao calcular cotação')
+    } catch (error: any) {
+      toast.error(`Erro ao calcular cotação: ${error.message}`)
     } finally {
       setIsCalculating(false)
     }
@@ -212,7 +217,24 @@ export default function Quotation() {
                 <Separator />
 
                 {/* Rota */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="originCep"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CEP Origem</FormLabel>
+                        <FormControl>
+                          <MaskedInput
+                            mask="cep"
+                            placeholder="00000-000"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="originUf"
@@ -236,6 +258,23 @@ export default function Quotation() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="destinationCep"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CEP Destino</FormLabel>
+                        <FormControl>
+                          <MaskedInput
+                            mask="cep"
+                            placeholder="00000-000"
+                            {...field}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -267,6 +306,8 @@ export default function Quotation() {
                       </FormItem>
                     )}
                   />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="distance"
@@ -306,7 +347,12 @@ export default function Quotation() {
                       <FormItem>
                         <FormLabel>Valor NF (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" {...field} />
+                          <MaskedInput
+                            mask="currency"
+                            placeholder="R$ 0,00"
+                            {...field}
+                            onValueChange={(val) => field.onChange(val)}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -393,7 +439,12 @@ export default function Quotation() {
                         <FormItem>
                           <FormLabel>Frete Sugerido (Tabela)</FormLabel>
                           <FormControl>
-                            <Input type="number" {...field} />
+                            <MaskedInput
+                              mask="currency"
+                              placeholder="R$ 0,00"
+                              {...field}
+                              onValueChange={(val) => field.onChange(val)}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -407,7 +458,12 @@ export default function Quotation() {
                         <FormItem>
                           <FormLabel>Frete Informado (Manual)</FormLabel>
                           <FormControl>
-                            <Input type="number" {...field} />
+                            <MaskedInput
+                              mask="currency"
+                              placeholder="R$ 0,00"
+                              {...field}
+                              onValueChange={(val) => field.onChange(val)}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -426,7 +482,12 @@ export default function Quotation() {
                       <FormItem>
                         <FormLabel>Carga (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" {...field} />
+                          <MaskedInput
+                            mask="currency"
+                            placeholder="R$ 0,00"
+                            {...field}
+                            onValueChange={(val) => field.onChange(val)}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
@@ -438,7 +499,12 @@ export default function Quotation() {
                       <FormItem>
                         <FormLabel>Descarga (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" {...field} />
+                          <MaskedInput
+                            mask="currency"
+                            placeholder="R$ 0,00"
+                            {...field}
+                            onValueChange={(val) => field.onChange(val)}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
@@ -450,7 +516,12 @@ export default function Quotation() {
                       <FormItem>
                         <FormLabel>Equipamento (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" {...field} />
+                          <MaskedInput
+                            mask="currency"
+                            placeholder="R$ 0,00"
+                            {...field}
+                            onValueChange={(val) => field.onChange(val)}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
@@ -462,7 +533,12 @@ export default function Quotation() {
                       <FormItem>
                         <FormLabel>Pedágio (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" {...field} />
+                          <MaskedInput
+                            mask="currency"
+                            placeholder="R$ 0,00"
+                            {...field}
+                            onValueChange={(val) => field.onChange(val)}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
